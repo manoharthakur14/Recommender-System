@@ -1,0 +1,160 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+######Attempt on user-user collaborate filtering######
+
+#### calculate user similarity matrix
+sim=t(profile_matrix_2)%*%profile_matrix_2
+diag_elem=diag(sim)
+norm_elem=sqrt(diag_elem)%*%t(sqrt(diag_elem))
+cos_sim=sim/norm_elem
+cos_sim[1:4,1:4] #check
+```
+
+```{r}
+######all lines with hash in front are not working or previous attempts!!!!!#######
+
+####Build recommender function for user-based filtering
+user_based_recommender <- function(similarity_matrix, profile_matrix, user){
+  #prediction_matr=matrix(0,3952,6040)
+  user_prediction=matrix(0,3952,2)
+  user_prediction[,1]=1:3952
+  #for (i in 1:6040){
+    top_30_sim_users=rownames(similarity_matrix[order(similarity_matrix[,user],
+                                                      decreasing = TRUE),])[2:31]
+    user_prediction[,2]=(profile_matrix[,top_30_sim_users]%*%similarity_matrix[top_30_sim_users,user])/sum(similarity_matrix[top_30_sim_users,user])
+  #prediction_matr[,i]=(profile_matrix[,top_30_sim_users]%*%similarity_matrix[top_30_sim_users,i])/sum(similarity_matrix[top_30_sim_users,i])
+  #}
+  #return(prediction_matr)
+    return_list=list(user_preds=user_prediction, top_10_pred=user_prediction[order(user_prediction[,2],decreasing = TRUE),][1:10,1])
+    #return(user_prediction[order(user_prediction[,2],decreasing = TRUE),][1:10,1])
+    #return(user_prediction)
+    return(return_list)
+}
+```
+```{r}
+####user based with binarized User Cosine Similarity Matrix
+install.packages('biclust')
+library(biclust)
+top_sim_users=binarize(cos_sim, threshold = 0.5)
+cos_sim_2=top_sim_users*cos_sim
+cos_sim_2=cos_sim_2 - diag(6040)
+```
+
+
+```{r}
+####Build recommender function for user-based filtering(using binarized UCSM)
+user_based_recommender_bin_sim <- function(similarity_matrix, profile_matrix, user){
+  user_prediction=matrix(0,3952,2)
+  user_prediction[,1]=1:3952
+  
+    user_prediction[,2]=(profile_matrix%*%similarity_matrix[,user])/sum(similarity_matrix[,user])
+    
+    return_list=list(user_preds=user_prediction, top_10_pred=user_prediction[order(user_prediction[,2],decreasing = TRUE),][1:10,1])
+    return(return_list)
+}
+```
+
+```{r}
+#####Retrive top 10 recommendations for User 1 (UBCF)
+user_pred=user_based_recommender(cos_sim,profile_matrix_2,49)
+user_pred$top_10_pred
+user_pred$user_preds[1:10,]
+```
+```{r}
+####Top 10 Recommendations for user 1 (UBCF)(using binarized UCSM)
+user_pred_2=user_based_recommender_bin_sim(cos_sim_2,profile_matrix_2,1)
+user_pred_2$top_10_pred
+user_pred_2$user_preds[1:10,]
+```
+
+```{r}
+#####Attempt on item based filtering#####
+
+#### calculate item similarity matrix
+item_sim=profile_matrix_2%*%t(profile_matrix_2)
+diag_elem_2=diag(item_sim)
+norm_elem_2=sqrt(diag_elem_2)%*%t(sqrt(diag_elem_2))
+item_cos_sim=item_sim/norm_elem_2
+item_cos_sim[1:4,1:4] #check
+rownames(item_cos_sim)=c(1:3952)
+colnames(item_cos_sim)=c(1:3952)
+item_cos_sim[is.nan(item_cos_sim)]=0
+```
+```{r}
+#### not working, skip this chunk
+#top_30_sim_items=matrix(0,3952,30)
+  #for (i in 1:nrow(top_30_sim_items)) {
+#x=sapply(item_cos_sim[order(item_cos_sim[,1],decreasing = TRUE),], colnames) 
+#x[1:10]
+#rownames(item_cos_sim[2,])
+#    top_30_sim_items[,]=rownames(item_cos_sim[order(item_cos_sim[,i],
+#                                                      decreasing = TRUE),])[2:31]
+    #cat(".")
+      
+  #}
+
+```
+```{r}
+####binarize item cosine similarity matrix
+#install.packages('biclust')
+#library(biclust)
+top_sim_items=binarize(item_cos_sim, threshold = 0.6)
+```
+```{r}
+rowSums(top_sim_items)[1:10]#check
+```
+
+```{r}
+#find indices for top similar items(not working, have to find another way)
+####create similarity matrix containing 0 for values under certain threshold
+item_sim_2=item_cos_sim*top_sim_items
+#subtracting 1 from the diagonal elements, cause i dont want the diagonal similarity values
+item_sim_2=item_sim_2 - diag(3952)
+dim(item_sim_2)#check
+rowSums(item_sim_2)[1:10]
+item_sim_2[1:5,1:5]#check
+```
+
+```{r}
+##### build recommender function for item-based filtering
+ibcf_recommender <- function(similarity_matrix, profile_matrix, user) {
+  ibcf_prediction=matrix(0,3952,2)
+  ibcf_prediction[,1]=1:3952
+  #top_30_sim_items=matrix(0,3952,30)
+  #for (i in 1:3952) {
+  #  top_30_sim_items[i,]=rownames(similarity_matrix[order(similarity_matrix[,i],
+  #                                                    decreasing = TRUE),])[2:31]
+  #}
+  #for (i in 1:5) {
+    
+  ibcf_prediction[,2]=(similarity_matrix%*%profile_matrix[,user])[1:3952]/rowSums(similarity_matrix)
+  #}
+  
+    return_list=list(ibcf_preds=ibcf_prediction, top_10_pred=ibcf_prediction[order(ibcf_prediction[,2],decreasing = TRUE),][1:10,1])
+    return(return_list)
+}
+```
+```{r}
+#### tests on matrixes
+#x=matrix(0,3952,2)
+#x[,2]=(item_sim_2%*%profile_matrix_2[,1])[1:3952]#works
+#y=(item_sim_2%*%profile_matrix_2[,1])
+#x[1,2]
+#TRUE%in%is.na(y[,1])
+#y[20:100,]
+#dim(x)
+#dim(y)
+#x[,2]=y
+#x[1:3,2]
+```
+
+```{r}
+#####Retrieve top 10 recommendations for User 1 (IBCF)
+ibcf_pred=ibcf_recommender(item_sim_2,profile_matrix_2,1)
+ibcf_pred$top_10_pred
+ibcf_pred$ibcf_preds[ibcf_pred$top_10_pred,]
+```
